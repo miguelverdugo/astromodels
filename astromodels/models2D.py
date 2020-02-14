@@ -1,5 +1,5 @@
 """
-Aditional 1D models
+Aditional 2D models
 """
 
 
@@ -16,9 +16,12 @@ from astropy.modeling.parameters import Parameter, InputParameterError
 from astropy.modeling.utils import ellipse_extent
 
 
-# ----- Models copied from astropy.modeling.functional_models
-# ----- They are here for completeness and templating
+TWOPI = 2 * np.pi
+FLOAT_EPSILON = float(np.finfo(np.float32).tiny)
+GAUSSIAN_SIGMA_TO_FWHM = 2.0 * np.sqrt(2.0 * np.log(2.0))
 
+# ----- Models copied from astropy.modeling.functional_models  -------------
+# ----- They are here for completeness and templating     ------------------
 
 class Gaussian2D(Fittable2DModel):
     r"""
@@ -406,6 +409,68 @@ class Sersic2D(Fittable2DModel):
                 'theta': u.rad,
                 'amplitude': outputs_unit['z']}
 
+# ------------------ END --------------------------------------------------------
+
+
+class Exponential2D(Sersic2D):
+    r"""
+    Two dimensional exponential profile. Appropiate for disk galaxies using a scale radius rd
+
+    Parameters
+    ----------
+    amplitude : float
+        Surface brightness at r_eff.
+    r_d : float
+        Effective (half-light) radius
+    x_0 : float, optional
+        x position of the center.
+    y_0 : float, optional
+        y position of the center.
+    ellip : float, optional
+        Ellipticity.
+    theta : float, optional
+        Rotation angle in radians, counterclockwise from
+        the positive x-axis.
+
+    """
+    amplitude = Parameter(default=1)
+    r_d = Parameter(default=1)
+    x_0 = Parameter(default=0)
+    y_0 = Parameter(default=0)
+    ellip = Parameter(default=0)
+    theta = Parameter(default=0)
+
+    def __init__(self, amplitude=amplitude.default, r_d=r_d.default,
+                 x_0=x_0.default, y_0=y_0.default, ellip=ellip.default, theta=theta.default):
+
+        r_eff = 1.678 * r_d
+        super().__init__(self, amplitude=amplitude, r_eff=r_eff, n=1, x_0=x_0, y_0=y_0,
+                         ellip=ellip, theta=theta)
+
+
+class Nuker2D(Fittable2DModel):
+    pass
+
+
+class EdgeOn2D(Fittable2DModel):
+    pass
+
+
+class KingProfile2d(Fittable2DModel):
+    pass
+
+
+class NFW2D(Fittable2DModel):
+    pass
+
+
+class Beta2D(Fittable2DModel):
+    pass
+
+
+
+
+
 
 class VelFieldCourteau(Fittable2DModel):
     r"""
@@ -462,11 +527,88 @@ class VelFieldCourteau(Fittable2DModel):
         #   azimuthal angle in the plane of the galaxy = cos(theta) = cost
         cost = (-(x - x0) * np.sin(phi) + (y - y0) * np.cos(phi)) / (r + 0.00001)
 
-        # sint=(-(x-x0)*np.cos(phi)+(y-y0)*np.sin(phi))/(R*np.cos(i))
-        #    Vr = Vmax*(R - R0)*((R - R0)**alpha + rd**alpha)**(-1.0/alpha)	#e.g. Courteau 1997
-
         vrot = vmax*r / (r**alpha + r_d**alpha)**(1/alpha)
-        # Vr = Vmax*2/np.pi*np.arctan( r/rd)         #arctan model
+
+        return v0 + vrot * np.sin(incl) * cost
+
+    @property
+    def input_units(self):
+        if self.x0.unit is None:
+            return None
+        else:
+            return {'x': self.x0.unit,
+                    'y': self.y0.unit}
+
+    def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+        # Note that here we need to make sure that x and y are in the same
+        # units otherwise this can lead to issues since rotation is not well
+        # defined.
+        if inputs_unit['x'] != inputs_unit['y']:
+            raise UnitsError("Units of 'x' and 'y' inputs should match")
+        return {'x0': inputs_unit['x'],
+                'y0': inputs_unit['x'],
+                'r_d': inputs_unit['x'],
+                'phi': u.deg,
+                'amplitude': outputs_unit['z']}
+
+
+class VelFieldArctan(Fittable2DModel):
+    r"""
+        Two dimensional Velocity Field following arctan approximation
+
+        Parameters
+        ----------
+
+        incl : float, u.Quantity
+            Inclination inclination between the normal to the galaxy plane and the line-of-sight,
+
+        phi : float, u.Quantity
+            Position angle of the major axis wrt to north (=up) measured counterclockwise,
+        vmax : float
+            Constant rotation velocity for R>>rd,
+
+        r_d : float
+            scale length of galaxy (assumed to be turnover radius)
+
+        x0 : float, optional
+            x position of the center.
+        y0 : float, optional
+            y position of the center.
+        """
+    incl = Parameter(default=45)
+    phi = Parameter(default=0)
+    vmax = Parameter(default=100)
+    r_d = Parameter(default=1)
+    x0 = Parameter(default=0)
+    y0 = Parameter(default=0)
+    v0 = Parameter(default=0)
+
+
+    @classmethod
+    def evaluate(cls, x, y, incl, phi, vmax, r_d, x0, y0, v0):
+        """
+        TODO: Be consistent with Sersic2D
+        (x,y) kartesian sky coordinates,
+        (x0,y0) kartesian sky coordiantes of rotation centre of galaxy,
+        V0 velocity of centre wrt observer,
+        incl inclination angle between the normal to the galaxy plane and the line-of-sight,
+        phi position angle of the major axis wrt to north (=up) measured counterclockwise,
+        Vmax constant rotation for R>>rd,
+        rd scale length of galaxy (assumed to be turnover radius)
+        """
+        if isinstance(incl, u.Quantity) is False:
+            incl = incl * u.deg
+        if isinstance(phi, u.Quantity) is False:
+            phi = phi * u.deg
+
+        phi = phi.to(u.rad)
+        incl = incl.to(u.rad)
+        r = ((x - x0) ** 2 + (y - y0) ** 2) ** 0.5
+        #   azimuthal angle in the plane of the galaxy = cos(theta) = cost
+        cost = (-(x - x0) * np.sin(phi) + (y - y0) * np.cos(phi)) / (r + 0.00001)
+
+        vrot = vmax*2/np.pi*np.arctan(r/r_d)         #arctan model
+
         return v0 + vrot * np.sin(incl) * cost
 
     @property

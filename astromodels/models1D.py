@@ -16,6 +16,9 @@ from astropy.modeling.parameters import Parameter, InputParameterError
 from astropy.modeling.utils import ellipse_extent
 
 
+TWOPI = 2 * np.pi
+FLOAT_EPSILON = float(np.finfo(np.float32).tiny)
+GAUSSIAN_SIGMA_TO_FWHM = 2.0 * np.sqrt(2.0 * np.log(2.0))
 
 
 # ----- Models copied from astropy.modeling.functional_models
