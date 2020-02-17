@@ -456,7 +456,7 @@ class EdgeOn2D(Fittable2DModel):
     pass
 
 
-class KingProfile2d(Fittable2DModel):
+class KingProfile2D(Fittable2DModel):
     pass
 
 
@@ -467,6 +467,100 @@ class NFW2D(Fittable2DModel):
 class Beta2D(Fittable2DModel):
     pass
 
+
+
+class KinProfile2D(Fittable1DModel):
+    """
+    Projected (surface density) analytic King Model.
+
+
+    Parameters
+    ----------
+    amplitude : float
+        Amplitude or scaling factor.
+    r_core : float
+        Core radius (f(r_c) ~ 0.5 f_0)
+    r_tide : float
+        Tidal radius.
+
+
+    Notes
+    -----
+
+    This model approximates a King model with an analytic function. The derivation of this
+    equation can be found in King '62 (equation 14). This is just an approximation of the
+    full model and the parameters derived from this model should be taken with caution.
+    It usually works for models with a concentration (c = log10(r_t/r_c) paramter < 2.
+
+    Model formula:
+
+
+    References
+    ----------
+    .. [1] http://articles.adsabs.harvard.edu/pdf/1962AJ.....67..471K
+    """
+
+    amplitude = Parameter(default=1, bounds=(FLOAT_EPSILON, None))
+    r_core = Parameter(default=1, bounds=(FLOAT_EPSILON, None))
+    r_tide = Parameter(default=2, bounds=(FLOAT_EPSILON, None))
+    x_0 = Parameter(default=0)
+    y_0 = Parameter(default=0)
+    ellip = Parameter(default=0)
+    theta = Parameter(default=0)
+
+    @property
+    def concentration(self):
+        """Concentration parameter of the king model"""
+        return np.log10(np.abs(self.r_tide/self.r_core))
+
+    @staticmethod
+    def evaluate(x, y, amplitude, r_core, r_tide, x_0, y_0, ellip, theta):
+        """
+        Analytic King model function.
+        """
+        a_core, b_core = r_core, (1 - ellip)*r_core
+        a_tide, b_tide = r_tide, (1 - ellip)*r_tide
+        cos_theta, sin_theta = np.cos(theta), np.sin(theta)
+        x_maj = (x - x_0) * cos_theta + (y - y_0) * sin_theta
+        x_min = -(x - x_0) * sin_theta + (y - y_0) * cos_theta
+        z = np.sqrt((x_maj / a_core)**2 + (x_min / b_core)**2)
+
+        result = amplitude * r_core**2 * (1/np.sqrt(z**2 + r_core**2) -
+                                          1/np.sqrt(r_tide**2 + r_core**2))**2
+
+        #result = amplitude * r_core ** 2 * (1/np.sqrt(x ** 2 + r_core ** 2) -
+        #                                    1/np.sqrt(r_tide ** 2 + r_core ** 2)) ** 2
+
+        # Set invalid r values to 0
+        bounds = (z >= r_tide) | (z < 0)
+        result[bounds] = result[bounds] * 0.
+
+        return result
+
+
+    @property
+    def bounding_box(self):
+        """
+        Tuple defining the default ``bounding_box`` limits.
+
+        The model is not defined for r > r_tide.
+
+        ``(r_low, r_high)``
+        """
+
+        return (0 * self.r_tide, 1 * self.r_tide)
+
+    @property
+    def input_units(self):
+        if self.r_core.unit is None:
+            return None
+        else:
+            return {'x': self.r_core.unit}
+
+    def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+        return {'r_core': inputs_unit['x'],
+                'r_tide': inputs_unit['x'],
+                'amplitude': outputs_unit['y']}
 
 
 

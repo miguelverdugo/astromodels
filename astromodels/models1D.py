@@ -101,7 +101,7 @@ class KingProjectedAnalytic1D(Fittable1DModel):
         """
 
         result = amplitude * r_core ** 2 * (1/np.sqrt(x ** 2 + r_core ** 2) -
-                                          1/np.sqrt(r_tide ** 2 + r_core ** 2)) ** 2
+                                            1/np.sqrt(r_tide ** 2 + r_core ** 2)) ** 2
 
         # Set invalid r values to 0
         bounds = (x >= r_tide) | (x<0)
@@ -258,4 +258,19 @@ class Sersic1D(Fittable1DModel):
                 'amplitude': outputs_unit['y']}
 
 
-# - End
+# ----------------------------------- End -------------------------------------------------------
+
+
+class NFW1D(Fittable1DModel):
+    pass
+
+
+class SchechterFunc(Fittable1DModel):
+    pass
+
+
+class PowerLaw1D(Fittable1DModel):
+    pass
+
+
+
