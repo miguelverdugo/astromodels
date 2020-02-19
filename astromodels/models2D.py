@@ -532,7 +532,8 @@ class KinProfile2D(Fittable1DModel):
         #                                    1/np.sqrt(r_tide ** 2 + r_core ** 2)) ** 2
 
         # Set invalid r values to 0
-        bounds = (z >= r_tide) | (z < 0)
+        z_tide = np.sqrt((x_maj/a_tide)**2 + (x_min/b_tide)**2)
+        bounds = (z >= z_tide)
         result[bounds] = result[bounds] * 0.
 
         return result
@@ -548,19 +549,23 @@ class KinProfile2D(Fittable1DModel):
         ``(r_low, r_high)``
         """
 
-        return (0 * self.r_tide, 1 * self.r_tide)
+        return 0 * self.r_tide, 1 * self.r_tide
 
     @property
     def input_units(self):
         if self.r_core.unit is None:
             return None
         else:
-            return {'x': self.r_core.unit}
+            return {'x': self.r_core.unit,
+                    'y': self.r_core.unit}
 
     def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
-        return {'r_core': inputs_unit['x'],
+        return {'x0': inputs_unit['x'],
+                'y0': inputs_unit['x'],
+                'r_core': inputs_unit['x'],
                 'r_tide': inputs_unit['x'],
-                'amplitude': outputs_unit['y']}
+                'theta': u.rad,
+                'amplitude': outputs_unit['z']}
 
 
 
