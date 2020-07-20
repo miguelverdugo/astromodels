@@ -448,6 +448,181 @@ class Exponential2D(Sersic2D):
                          ellip=ellip, theta=theta)
 
 
+class VelField(Fittable2DModel):
+    r"""
+        Two dimensional Velocity Field following arctan approximation
+
+        Parameters
+        ----------
+
+        ellip : float, u.Quantity
+            Ellipticity on the sky
+
+        theta : float, u.Quantity
+            Position angle of the major axis wrt to north (=up) measured counterclockwise,
+        vmax : float, u.Quantity
+            Constant rotation velocity for R>>rd,
+
+        r_eff : float
+            scale length of galaxy (assumed to be turnover radius)
+
+        x0 : float, optional
+            x position of the center.
+        y0 : float, optional
+            y position of the center.
+
+        q : float, optional
+            Disk thickness
+        """
+    vmax = Parameter(default=100)
+    r_eff = Parameter(default=1)
+
+    ellip = Parameter(default=0)    # maximum ellipticity 1 - q,  make tests
+    theta = Parameter(default=0)
+
+    x_0 = Parameter(default=0)
+    y_0 = Parameter(default=0)
+
+    q = Parameter(default=0.2)
+
+    @staticmethod
+    def evaluate(x, y, vmax, r_eff,  ellip, theta, x_0, y_0, q):
+        """
+        Two dimensional velocity field, arctan approximation
+
+        """
+        if isinstance(theta, u.Quantity) is False:
+            theta = theta * u.deg
+
+        r_d = r_eff  # For now,  for n=1  r_eff = 1.678 * r_d
+        theta = (-theta).to(u.rad)
+        # get inclination from ellipticity
+        incl = np.arccos(np.sqrt(((1 - ellip) ** 2 - q ** 2) / (1 - q ** 2)))
+
+        r = ((x - x_0) ** 2 + (y - y_0) ** 2) ** 0.5
+
+        #   azimuthal angle in the plane of the galaxy = cos(theta) = cost
+        cost = (-(x - x_0) * np.sin(theta) + (y - y_0) * np.cos(theta)) / (r + 0.00001)
+        vrot = vmax*2 / np.pi*np.arctan(r/r_d)         #arctan model
+
+        return vrot * np.sin(incl) * cost
+
+    @property
+    def input_units(self):
+        if self.x_0.unit is None:
+            return None
+        else:
+            return {'x': self.x_0.unit,
+                    'y': self.y_0.unit}
+
+    def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+        # Note that here we need to make sure that x and y are in the same
+        # units otherwise this can lead to issues since rotation is not well
+        # defined.
+        if inputs_unit['x'] != inputs_unit['y']:
+            raise UnitsError("Units of 'x' and 'y' inputs should match")
+        return {'x_0': inputs_unit['x'],
+                'y_0': inputs_unit['x'],
+                'r_eff': inputs_unit['x'],
+                'phi': u.deg,
+                'vrot': outputs_unit['z']}
+
+
+class DispersionField(Fittable2DModel):
+
+    r"""
+        Two dimensional Velocity Dispersion
+        This follows a broken power law as in Veale et al. 2017
+
+        .. math:: \sigma(R)=\sigma_0 2^{\gamma_1-\gamma_2} (\frac{R}{R_b})^{\gamma_1}(1+\frac{R}{R_b}^{\gamma_2-\gamma_1}
+
+        where
+        :math:`\sigma_0` is the velocity dispersion
+        :math:`\gamma_1`  and math:`\gamma_2` are the inner and outer power slopes. Set to -0.04 and -0.42 as
+        default values
+        :math:`R_b` is the break radius, set to :math:`R_b = R_{eff}` for simplicity
+
+
+        Parameters
+        ----------
+
+        incl : float, u.Quantity
+            Inclination inclination between the normal to the galaxy plane and the line-of-sight,
+
+        phi : float, u.Quantity
+            Position angle of the major axis wrt to north (=up) measured counterclockwise,
+        sigma : float, u.Quantity
+            velocity dispersion
+
+        r_eff : float
+            scale length of galaxy (assumed to be turnover radius) it will be used as sigma
+
+        x0 : float, optional
+            x position of the center.
+        y0 : float, optional
+            y position of the center.
+
+        e_in : float, optional
+            inner power law slope
+
+        e_out : float, optional
+            outer power law slope
+
+        """
+   # incl = Parameter(default=45)
+    ellip = Parameter(default=0)
+    theta = Parameter(default=0)
+    sigma = Parameter(default=100)
+    r_eff = Parameter(default=1)
+    x_0 = Parameter(default=0)
+    y_0 = Parameter(default=0)
+    e_in = Parameter(default=-0.0)
+    e_out = Parameter(default=-0.5)
+
+    @staticmethod
+    def evaluate(x, y, ellip, theta, sigma, r_eff, x_0, y_0, e_in, e_out):
+        """
+        evaluation
+
+        """
+
+        if isinstance(theta, u.Quantity) is False:
+            theta = theta * u.deg
+
+        theta = theta.to(u.rad)
+
+        a, b = r_eff, (1 - ellip) * r_eff
+        cos_theta, sin_theta = np.cos(theta), np.sin(theta)
+        x_maj = (x - x_0) * sin_theta + (y - y_0) * cos_theta + 0.1
+        x_min = -(x - x_0) * cos_theta + (y - y_0) * sin_theta + 0.1  # to avoid inf values
+        z = np.sqrt((x_maj / a) ** 2 + (x_min / b) ** 2)
+        result = sigma * 2**(e_in - e_out) * z**e_in * (1 + z)**(e_out - e_in)
+
+        return result
+
+    @property
+    def input_units(self):
+        if self.x_0.unit is None:
+            return None
+        else:
+            return {'x': self.x_0.unit,
+                    'y': self.y_0.unit}
+
+    def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+        # Note that here we need to make sure that x and y are in the same
+        # units otherwise this can lead to issues since rotation is not well
+        # defined.
+        if inputs_unit['x'] != inputs_unit['y']:
+            raise UnitsError("Units of 'x' and 'y' inputs should match")
+        return {'x_0': inputs_unit['x'],
+                'y_0': inputs_unit['x'],
+                'r_eff': inputs_unit['x'],
+                'phi': u.deg,
+                'sigma': outputs_unit['z']}
+
+
+
+
 class Nuker2D(Fittable2DModel):
     pass
 
@@ -682,7 +857,6 @@ class VelFieldArctan(Fittable2DModel):
     y0 = Parameter(default=0)
     v0 = Parameter(default=0)
 
-
     @classmethod
     def evaluate(cls, x, y, incl, phi, vmax, r_d, x0, y0, v0):
         """
@@ -729,6 +903,22 @@ class VelFieldArctan(Fittable2DModel):
                 'r_d': inputs_unit['x'],
                 'phi': u.deg,
                 'amplitude': outputs_unit['z']}
+
+
+class VelField2DFreeman(Fittable2DModel):
+    """
+    See Appendix A of Wisnioski 2015 for a description of the model
+    including velocity dispersion components
+    """
+    pass
+
+
+
+
+
+
+
+
 
 
 
